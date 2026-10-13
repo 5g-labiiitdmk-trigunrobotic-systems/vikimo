@@ -1,45 +1,23 @@
-
-from decimal import Decimal, ROUND_HALF_UP
-
-from django.db import transaction
-from django.utils import timezone
 from django.db.models import Prefetch
-
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.models import Order, OrderDayCounter, OrderItem, Product
+from core import order_services
+from core.models import Order, OrderItem
 from core.order_serializers import (
     OrderCreateSerializer,
     OrderResponseSerializer,
+    OrderUpdateSerializer,
+)
+from core.order_services import (  # noqa: F401  (re-exported for callers)
+    TAX_RATE,
+    ServiceError,
+    generate_order_number,
+    money,
 )
 from core.views import error_response
-
-
-TAX_RATE = Decimal("0.18")
-
-
-def money(value):
-    return value.quantize(
-        Decimal("0.01"),
-        rounding=ROUND_HALF_UP,
-    )
-
-
-def generate_order_number():
-    """Return the next ORD-YYYYMMDD-NNNN number for today (Asia/Kolkata).
-
-    Must run inside transaction.atomic(): the counter row is locked until the
-    caller commits, so concurrent creators get different, gap-free numbers.
-    """
-    today = timezone.localdate()
-    OrderDayCounter.objects.get_or_create(date=today)
-    counter = OrderDayCounter.objects.select_for_update().get(date=today)
-    counter.last_number += 1
-    counter.save(update_fields=["last_number"])
-    return f"ORD-{today:%Y%m%d}-{counter.last_number:04d}"
 
 
 class OrderPagination(PageNumberPagination):
@@ -48,22 +26,60 @@ class OrderPagination(PageNumberPagination):
     max_page_size = 100
 
 
+def order_queryset():
+    return Order.objects.select_related("dealer").prefetch_related(
+        Prefetch(
+            "items",
+            queryset=OrderItem.objects.select_related("product").order_by(
+                "id"
+            ),
+        )
+    )
+
+
+def service_error_response(exc):
+    """Contract error response; details are kept as structured data."""
+    return Response(
+        {
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details or [],
+            }
+        },
+        status=exc.http_status,
+    )
+
+
+def load_order(order_number):
+    """Fetch one order with its items, re-pricing a DRAFT if needed."""
+    order = order_queryset().filter(order_number=order_number).first()
+    if order is not None and order_services.refresh_draft_prices(order):
+        order = order_queryset().get(pk=order.pk)
+    return order
+
+
+def body_or_error(request):
+    if not isinstance(request.data, dict):
+        return None, error_response(
+            "VALIDATION_ERROR",
+            "Request body must be a JSON object.",
+            status.HTTP_400_BAD_REQUEST,
+        )
+    return request.data, None
+
+
 class OrderListCreateView(APIView):
     """GET /api/orders/ and POST /api/orders/"""
 
     def get(self, request):
-        orders = Order.objects.select_related("dealer").prefetch_related(
-            Prefetch(
-                "items",
-                queryset=OrderItem.objects.select_related("product"),
-            )
-        )
+        orders = order_queryset().order_by("-created_at", "-id")
 
         dealer_id = request.query_params.get("dealer_id")
         order_status = request.query_params.get("status")
 
         if dealer_id:
-            if not dealer_id.isdigit():
+            if not dealer_id.isdigit() or int(dealer_id) > 2**63 - 1:
                 return error_response(
                     "VALIDATION_ERROR",
                     "dealer_id must be an integer.",
@@ -77,12 +93,21 @@ class OrderListCreateView(APIView):
         paginator = OrderPagination()
         page = paginator.paginate_queryset(orders, request)
 
+        # DRAFT orders show current catalogue prices.
+        if any(order_services.refresh_draft_prices(o) for o in page):
+            by_id = {o.pk: o for o in order_queryset().filter(
+                pk__in=[o.pk for o in page])}
+            page = [by_id[o.pk] for o in page]
+
         serializer = OrderResponseSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
     def post(self, request):
-        serializer = OrderCreateSerializer(data=request.data)
+        body, error = body_or_error(request)
+        if error:
+            return error
 
+        serializer = OrderCreateSerializer(data=body)
         if not serializer.is_valid():
             return error_response(
                 "VALIDATION_ERROR",
@@ -91,97 +116,105 @@ class OrderListCreateView(APIView):
                 serializer.errors,
             )
 
+        key = request.headers.get("Idempotency-Key")
+        if key is not None:
+            key = key.strip()
+            if not key or len(key) > 255:
+                return error_response(
+                    "VALIDATION_ERROR",
+                    "Idempotency-Key must be 1 to 255 characters.",
+                    status.HTTP_400_BAD_REQUEST,
+                )
+
         validated = serializer.validated_data
-        dealer = validated["dealer"]
-        requested_items = validated["items"]
-
         try:
-            with transaction.atomic():
-                subtotal = Decimal("0.00")
-                tax_total = Decimal("0.00")
-                order_lines = []
-
-                # Read current product prices from the database.
-                for item in requested_items:
-                    product = Product.objects.get(sku=item["sku"])
-                    quantity = item["quantity"]
-                    unit_price = product.price
-
-                    line_subtotal = money(unit_price * quantity)
-                    line_tax = money(line_subtotal * TAX_RATE)
-                    line_total = line_subtotal + line_tax
-
-                    subtotal += line_subtotal
-                    tax_total += line_tax
-
-                    order_lines.append(
-                        {
-                            "product": product,
-                            "quantity": quantity,
-                            "unit_price": unit_price,
-                            "line_subtotal": line_subtotal,
-                            "line_tax": line_tax,
-                            "line_total": line_total,
-                        }
-                    )
-
-                order = Order.objects.create(
-                    order_number=generate_order_number(),
-                    dealer=dealer,
-                    status=Order.Status.DRAFT,
-                    subtotal=money(subtotal),
-                    tax_total=money(tax_total),
-                    grand_total=money(subtotal + tax_total),
-                )
-
-                OrderItem.objects.bulk_create(
-                    [
-                        OrderItem(order=order, **line)
-                        for line in order_lines
-                    ]
-                )
-
-        except Product.DoesNotExist:
-            return error_response(
-                "NOT_FOUND",
-                "A requested product was not found.",
-                status.HTTP_404_NOT_FOUND,
+            order, created = order_services.create_order(
+                validated["dealer"],
+                validated["items"],
+                idempotency_key=key,
+                body=body,
             )
-
-        order = Order.objects.select_related("dealer").prefetch_related(
-            Prefetch(
-                "items",
-                queryset=OrderItem.objects.select_related("product"),
-            )
-        ).get(pk=order.pk)
+        except ServiceError as exc:
+            return service_error_response(exc)
 
         return Response(
-            OrderResponseSerializer(order).data,
-            status=status.HTTP_201_CREATED,
+            OrderResponseSerializer(load_order(order.order_number)).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
 
 class OrderDetailView(APIView):
-    """GET /api/orders/{order_number}/"""
+    """GET and PUT /api/orders/{order_number}/"""
 
     def get(self, request, order_number):
-        order = (
-            Order.objects.select_related("dealer")
-            .prefetch_related(
-                Prefetch(
-                    "items",
-                    queryset=OrderItem.objects.select_related("product"),
-                )
-            )
-            .filter(order_number=order_number)
-            .first()
-        )
-
+        order = load_order(order_number)
         if order is None:
+            return service_error_response(
+                ServiceError("NOT_FOUND", "Order not found.", 404)
+            )
+        return Response(OrderResponseSerializer(order).data)
+
+    def put(self, request, order_number):
+        body, error = body_or_error(request)
+        if error:
+            return error
+
+        existing = Order.objects.filter(order_number=order_number).first()
+        if existing is None:
+            return service_error_response(
+                ServiceError("NOT_FOUND", "Order not found.", 404)
+            )
+        if existing.status != Order.Status.DRAFT:
+            return service_error_response(ServiceError(
+                "ORDER_LOCKED",
+                f"Only DRAFT orders can be edited; this order is "
+                f"{existing.status}.",
+                409,
+            ))
+
+        serializer = OrderUpdateSerializer(data=body)
+        if not serializer.is_valid():
             return error_response(
-                "NOT_FOUND",
-                "Order not found.",
-                status.HTTP_404_NOT_FOUND,
+                "VALIDATION_ERROR",
+                "Invalid order data.",
+                status.HTTP_400_BAD_REQUEST,
+                serializer.errors,
             )
 
-        return Response(OrderResponseSerializer(order).data)
+        try:
+            order_services.replace_items(
+                order_number, serializer.validated_data["items"]
+            )
+        except ServiceError as exc:
+            return service_error_response(exc)
+
+        return Response(OrderResponseSerializer(load_order(order_number)).data)
+
+
+class OrderActionView(APIView):
+    """POST /api/orders/{order_number}/{confirm|dispatch|deliver|cancel}/"""
+
+    action = None
+
+    def post(self, request, order_number):
+        try:
+            getattr(order_services, self.action)(order_number)
+        except ServiceError as exc:
+            return service_error_response(exc)
+        return Response(OrderResponseSerializer(load_order(order_number)).data)
+
+
+class OrderConfirmView(OrderActionView):
+    action = "confirm"
+
+
+class OrderDispatchView(OrderActionView):
+    action = "dispatch"
+
+
+class OrderDeliverView(OrderActionView):
+    action = "deliver"
+
+
+class OrderCancelView(OrderActionView):
+    action = "cancel"

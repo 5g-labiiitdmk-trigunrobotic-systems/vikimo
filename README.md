@@ -3,8 +3,9 @@
 **Track: `aiml`** (AI / ML Intern)
 
 - Required parts built: A1 backend core, C Dealer Assistant, D Forecasting and reorder.
-- Optional parts attempted: E frontend (a basic portal in `templates/` and `static/`).
-- Not built: A2 order engine (confirm/dispatch/deliver/cancel, idempotency) and B supplier sync.
+- Optional parts attempted: A2 order engine, B supplier sync (both also needed for the
+  `django` track), E frontend (a basic portal in `templates/` and `static/`).
+- `DECISIONS.md` has the AI / ML answers, followed by a section answering the Django-track questions.
 - LLM provider: **Groq**, model `openai/gpt-oss-20b` (override with `GROQ_MODEL`).
 - Video walkthrough: _add your unlisted link here before submitting_
 
@@ -104,6 +105,21 @@ formula, and data limitations are recorded in [`DECISIONS.md`](./DECISIONS.md).
 Reorder suggestions preserve decimal forecast demand and implement the
 assignment's exact lead-time demand and safety-stock formula against current
 database stock.
+
+## Order engine and supplier sync
+
+Order rules live in [`core/order_services.py`](./core/order_services.py): the
+status flow (DRAFT, CONFIRMED, DISPATCHED, DELIVERED, CANCELLED), all-or-nothing
+confirm with row locks, price lock on confirm, exact per-line GST
+(`ROUND_HALF_UP`), and `Idempotency-Key` handling. A DRAFT shows the current
+catalogue price whenever it is read; a confirmed order never changes price.
+
+`POST /api/sync/supplier/` ([`core/supplier_sync.py`](./core/supplier_sync.py))
+fetches all pages first (429 `Retry-After` and 5xx are retried, at most 5
+attempts per request) and only then writes, in one transaction. Any failure
+returns `502 SUPPLIER_UNAVAILABLE` with nothing changed. To try it locally, run
+`python supplier_mock/mock_supplier.py` and set `SUPPLIER_API_URL` and
+`SUPPLIER_API_KEY` to the values it prints.
 
 ## Setup
 

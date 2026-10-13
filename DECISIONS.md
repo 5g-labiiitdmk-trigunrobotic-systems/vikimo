@@ -208,3 +208,95 @@ prompt-injection/unsupported-claim defenses, and UTF-8 rupee-symbol response
 bytes. Forecast tests cover output shape/coverage, decimal forecasts,
 Diwali uplift and fallback/leakage boundaries, and reorder rounding and
 invalid/missing inputs. No unit test requires a live LLM call.
+
+---
+
+# Django Track Decisions
+
+## 1. Where is overselling prevented?
+
+`core/order_services.py:208` (`confirm`). Inside one transaction it locks the
+order row (`_lock_order`, line 86) and then every product row with
+`SELECT ... FOR UPDATE` in SKU order (`_lock_products`, line 97), checks each
+line against the locked stock, and only then deducts. Without the locks, two
+confirms for the last 5 units would both read `stock = 5`, both pass the check
+and both subtract, leaving stock at -5 (or, with the unsigned column, a database
+error) and two promised orders. Locking in SKU order stops two multi-line orders
+from deadlocking each other. Tests: `StockTests` in `core/test_order_engine.py`
+(six simultaneous confirms for stock 5 give exactly two 200s).
+
+## 2. GST and rounding
+
+`core/order_services.py:49` (`line_amounts`): `line_subtotal = unit_price x
+quantity` in `Decimal`, `line_tax = money(line_subtotal x Decimal("0.18"))` with
+`ROUND_HALF_UP` (`money`, line 31), per line; order totals are sums of the
+rounded lines (`_set_totals`, line 61). Floats cannot represent 0.045 exactly
+(it becomes 0.04499...) so it would round down to 0.04 instead of 0.05.
+`Decimal`'s default rounding is `ROUND_HALF_EVEN`, which turns 0.125 into 0.12
+and 0.045 into 0.04, so the mode is set explicitly.
+
+## 3. Unique order numbers and idempotency under concurrency
+
+Order numbers: `generate_order_number` (`core/order_services.py:35`) increments a
+per-day row in `OrderDayCounter` (`core/models.py:128`) under `FOR UPDATE`; the
+lock lasts until the creating transaction commits, so concurrent requests queue
+and get consecutive numbers. The date uses `timezone.localdate()` with
+`TIME_ZONE = "Asia/Kolkata"`. Idempotency: `create_order`
+(`core/order_services.py:144`) first inserts the `IdempotencyRecord`
+(`core/models.py:138`, unique key). A simultaneous duplicate blocks on that
+unique insert until the first request commits, then hits `IntegrityError`
+(line 161), reads the stored record, and returns the original order (200), or
+`IDEMPOTENCY_CONFLICT` if the body hash differs. If the first request fails, its
+key row rolls back with it, so the key stays free.
+
+## 4. Schema and `on_delete`
+
+- `Order.dealer` -> `PROTECT`: a dealer with orders cannot be deleted, so order history survives.
+- `OrderItem.order` -> `CASCADE`: items have no meaning without their order.
+- `OrderItem.product` -> `PROTECT`: an ordered product cannot be deleted (prices and history stay valid).
+- `AssistantSession.dealer` -> `CASCADE`: chat memory is disposable with its dealer.
+- `IdempotencyRecord.order` -> `CASCADE`: a key is meaningless without its order.
+- `OrderItem` has a unique (order, product) constraint; `OrderDayCounter` is keyed by date; `Product` is keyed by SKU.
+See `core/models.py:4-150`.
+
+## 5. Status transitions and cancel-once
+
+`core/order_services.py`: `confirm` (208), `_simple_transition` (245, used by
+`dispatch` and `deliver`) and `cancel` (269) each lock the order row and compare
+`order.status` to the single status they allow; anything else raises
+`INVALID_TRANSITION` (`_invalid_transition`, line 107). Because the check runs
+under the row lock, two simultaneous cancels serialize: the first restores stock
+and sets CANCELLED, the second sees CANCELLED and is rejected before it touches
+stock. Test: `test_concurrent_cancels_restore_once`.
+
+## 6. Supplier sync: rate limits, failures, duplicates, all-or-nothing
+
+`core/supplier_sync.py:51` (`_fetch_page`) allows `MAX_ATTEMPTS = 5` per request:
+429 waits `Retry-After` (capped at 30 s), 5xx, malformed pages and connection
+errors back off 0.5 s doubling, and 401/other 4xx fail at once. `fetch_feed`
+(line 97) follows `next_cursor` to the end and raises `SupplierUnavailable` on
+any failure or a repeated cursor. The database is only written in `apply_feed`
+(line 189), after the whole feed is in memory, so a failed fetch changes
+nothing and the view returns `502 SUPPLIER_UNAVAILABLE`. Invalid items go to
+`rejected` (`clean_item`, line 149). Duplicate SKUs keep the latest `updated_at`
+(`dedupe`, line 179), after invalid items are removed.
+
+## 7. Created / updated / unchanged, and why a second run is a no-op
+
+`apply_feed` loads existing products for the feed's SKUs, then: missing -> create
+with stock 0; any of price, name, category, brand, vehicle_fitment or
+description different (compared as `Decimal`/exact strings) -> update only those
+columns with `bulk_update`; otherwise unchanged. Stock is never in the update
+list. After one sync every compared field equals the feed, so the same feed
+gives `created 0, updated 0`. A Postgres advisory lock (line 195) serializes
+overlapping syncs.
+
+## 8. Weakest part, and two more days
+
+Order creation in the assistant (`core/assistant_tools.py`) still has its own
+copy of the order-building code; I would route it through
+`order_services` so there is one implementation. Idempotency records never
+expire, there is no authentication (the brief asks for none), and the sync is
+synchronous, so a very large feed ties up a request thread. With two more days I
+would move sync to a background job, expire old keys, and add load tests with
+many more concurrent clients than the unit tests use.

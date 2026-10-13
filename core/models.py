@@ -133,3 +133,20 @@ class OrderDayCounter(models.Model):
 
     def __str__(self):
         return f"{self.date}: {self.last_number}"
+
+
+class IdempotencyRecord(models.Model):
+    """Remembers which order an Idempotency-Key created, and for which body."""
+
+    key = models.CharField(max_length=255, unique=True)
+    request_hash = models.CharField(max_length=64)
+    order = models.ForeignKey(
+        Order,
+        null=True,
+        on_delete=models.CASCADE,
+        related_name="idempotency_records",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.key

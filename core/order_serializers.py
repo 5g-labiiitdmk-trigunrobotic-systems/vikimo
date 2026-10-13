@@ -12,11 +12,7 @@ class OrderItemInputSerializer(serializers.Serializer):
         return value.strip()
 
 
-class OrderCreateSerializer(serializers.Serializer):
-    dealer_id = serializers.PrimaryKeyRelatedField(
-        queryset=Dealer.objects.all(),
-        source="dealer",
-    )
+class OrderItemsMixin(serializers.Serializer):
     items = OrderItemInputSerializer(many=True, allow_empty=False)
 
     def validate_items(self, items):
@@ -32,12 +28,29 @@ class OrderCreateSerializer(serializers.Serializer):
 
             seen_skus.add(sku)
 
-            if not Product.objects.filter(sku=sku).exists():
+        existing = set(
+            Product.objects.filter(sku__in=seen_skus).values_list(
+                "sku", flat=True
+            )
+        )
+        for item in items:
+            if item["sku"] not in existing:
                 raise serializers.ValidationError(
-                    f"Product not found: {sku}"
+                    f"Product not found: {item['sku']}"
                 )
 
         return items
+
+
+class OrderCreateSerializer(OrderItemsMixin):
+    dealer_id = serializers.PrimaryKeyRelatedField(
+        queryset=Dealer.objects.all(),
+        source="dealer",
+    )
+
+
+class OrderUpdateSerializer(OrderItemsMixin):
+    pass
 
 
 class OrderItemResponseSerializer(serializers.ModelSerializer):
