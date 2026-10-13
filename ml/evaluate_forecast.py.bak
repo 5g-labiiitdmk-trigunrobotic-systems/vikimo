@@ -1,0 +1,210 @@
+﻿from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+ROOT = Path(__file__).resolve().parent.parent
+SALES_FILE = ROOT / "data" / "sales_history.csv"
+OUTPUT_FILE = ROOT / "ml" / "forecast_evaluation.csv"
+
+HORIZON = 4
+HISTORY_WINDOW = 12
+MIN_TRAIN_WEEKS = 12
+YEAR_WEEKS = 52
+
+
+def promotion_multiplier(history):
+    """Estimate promotion effect using historical observations only."""
+    promo = history.loc[history["promo_flag"] == 1, "units_sold"]
+    regular = history.loc[history["promo_flag"] == 0, "units_sold"]
+
+    if promo.empty or regular.empty or regular.mean() <= 0:
+        return 1.0
+
+    ratio = promo.mean() / regular.mean()
+    return min(max(float(ratio), 0.5), 2.0)
+
+
+def main():
+    df = pd.read_csv(SALES_FILE)
+
+    required = {"sku", "week_start", "units_sold", "promo_flag"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing required columns: {sorted(missing)}")
+
+    df["week_start"] = pd.to_datetime(df["week_start"], errors="coerce")
+    df["units_sold"] = pd.to_numeric(df["units_sold"], errors="coerce")
+    df["promo_flag"] = pd.to_numeric(df["promo_flag"], errors="coerce")
+    df = df.dropna(subset=list(required))
+
+    if not df["promo_flag"].isin([0, 1]).all():
+        raise ValueError("promo_flag must contain only 0 or 1.")
+
+    df["units_sold"] = df["units_sold"].clip(lower=0)
+    df["promo_flag"] = df["promo_flag"].astype(int)
+
+    weekly = (
+        df.groupby(["sku", "week_start"], as_index=False)
+        .agg(
+            units_sold=("units_sold", "sum"),
+            promo_flag=("promo_flag", "max"),
+        )
+        .sort_values(["sku", "week_start"])
+    )
+
+    all_weeks = sorted(pd.Timestamp(w) for w in weekly["week_start"].unique())
+
+    if len(all_weeks) < YEAR_WEEKS + HORIZON:
+        raise ValueError("Not enough history for a 52-week seasonal backtest.")
+
+    # Use non-overlapping four-week holdout periods.
+    # Start only when same-week-last-year observations may be available.
+    forecast_starts = range(
+        YEAR_WEEKS,
+        len(all_weeks) - HORIZON + 1,
+        HORIZON,
+    )
+
+    histories = {
+        sku: group.sort_values("week_start").set_index("week_start")
+        for sku, group in weekly.groupby("sku")
+    }
+
+    predictions = []
+
+    for start_index in forecast_starts:
+        test_weeks = all_weeks[start_index:start_index + HORIZON]
+
+        for target_week in test_weeks:
+            prior_year_week = target_week - pd.Timedelta(weeks=YEAR_WEEKS)
+
+            for sku, history_table in histories.items():
+                # Only information strictly before the target week is used.
+                history = history_table[
+                    history_table.index < target_week
+                ].tail(HISTORY_WINDOW)
+
+                if len(history) < MIN_TRAIN_WEEKS:
+                    continue
+
+                if target_week not in history_table.index:
+                    continue
+
+                # All methods are scored on the same SKU/week cases.
+                if prior_year_week not in history_table.index:
+                    continue
+
+                actual_row = history_table.loc[target_week]
+                prior_year_row = history_table.loc[prior_year_week]
+
+                # Defensive check if duplicate dates somehow remain.
+                if isinstance(actual_row, pd.DataFrame):
+                    actual_row = actual_row.iloc[0]
+                if isinstance(prior_year_row, pd.DataFrame):
+                    prior_year_row = prior_year_row.iloc[0]
+
+                actual = float(actual_row["units_sold"])
+                is_promo = int(actual_row["promo_flag"])
+
+                last_value = float(history.iloc[-1]["units_sold"])
+                recent_average = float(history["units_sold"].mean())
+                same_week_last_year = float(prior_year_row["units_sold"])
+
+                multiplier = promotion_multiplier(history)
+                promotion_aware = recent_average
+
+                if is_promo:
+                    promotion_aware *= multiplier
+
+                predictions.append({
+                    "forecast_period_start": test_weeks[0].date().isoformat(),
+                    "sku": sku,
+                    "week_start": target_week.date().isoformat(),
+                    "actual": actual,
+                    "last_value": max(0.0, last_value),
+                    "recent_average": max(0.0, recent_average),
+                    "same_week_last_year": max(0.0, same_week_last_year),
+                    "promotion_aware": max(0.0, promotion_aware),
+                    "is_promo": is_promo,
+                    "promotion_multiplier": multiplier,
+                    "history_observations": len(history),
+                })
+
+    result = pd.DataFrame(predictions)
+
+    if result.empty:
+        raise ValueError("No comparable predictions were evaluated.")
+
+    methods = [
+        ("Last value", "last_value"),
+        ("Recent average", "recent_average"),
+        ("Same week last year", "same_week_last_year"),
+        ("Promotion-aware", "promotion_aware"),
+    ]
+
+    scores = []
+
+    for name, column in methods:
+        errors = result[column] - result["actual"]
+        scores.append({
+            "method": name,
+            "predictions": len(result),
+            "MAE": float(errors.abs().mean()),
+            "RMSE": float(np.sqrt((errors ** 2).mean())),
+        })
+
+    score_df = pd.DataFrame(scores)
+    baseline_mae = score_df.loc[
+        score_df["method"] != "Promotion-aware", "MAE"
+    ].min()
+    model_mae = score_df.loc[
+        score_df["method"] == "Promotion-aware", "MAE"
+    ].iloc[0]
+
+    print("=== MULTI-PERIOD CHRONOLOGICAL BACKTEST ===")
+    print("Forecast periods:", result["forecast_period_start"].nunique())
+    print("Evaluated weeks:", result["week_start"].nunique())
+    print("SKUs evaluated:", result["sku"].nunique())
+    print("Comparable predictions:", len(result))
+    print("All methods use the same evaluated SKU/week cases.")
+    print("Lower MAE and RMSE are better.")
+
+    print("\n=== OVERALL RESULTS ===")
+    print(score_df.to_string(index=False, formatters={
+        "MAE": "{:.3f}".format,
+        "RMSE": "{:.3f}".format,
+    }))
+
+    if baseline_mae > 0:
+        improvement = (baseline_mae - model_mae) / baseline_mae * 100
+        print(f"\nMAE improvement over best baseline: {improvement:+.2f}%")
+    else:
+        print("\nBest baseline MAE is zero; percentage improvement is undefined.")
+
+    print("\n=== RESULTS BY FORECAST PERIOD ===")
+    period_scores = []
+
+    for period, group in result.groupby("forecast_period_start"):
+        row = {"forecast_period_start": period, "predictions": len(group)}
+
+        for name, column in methods:
+            row[f"{column}_MAE"] = (
+                group[column] - group["actual"]
+            ).abs().mean()
+
+        period_scores.append(row)
+
+    period_df = pd.DataFrame(period_scores)
+    print(period_df.to_string(index=False, formatters={
+        column: "{:.3f}".format
+        for column in period_df.columns
+        if column.endswith("_MAE")
+    }))
+
+    result.to_csv(OUTPUT_FILE, index=False)
+    print(f"\nDetailed results saved to: {OUTPUT_FILE}")
+
+
+if __name__ == "__main__":
+    main()

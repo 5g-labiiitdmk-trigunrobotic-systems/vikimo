@@ -1,0 +1,129 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101c31">
+  <title>VIKMO DealerDesk</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'style.css' %}">
+</head>
+<body>
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/></symbol>
+    <symbol id="i-warehouse" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v11H3V10Z"/><path d="M9 21v-7h6v7M7 10h.01M12 10h.01M17 10h.01"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M4 3h16v18l-4-2-4 2-4-2-4 2V3Z"/><path d="M8 8h8M8 12h8M8 16h4"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3ZM19 14l1.1 2.9L23 18l-2.9 1.1L19 22l-1.1-2.9L15 18l2.9-1.1L19 14Z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 14 4-4 4 3 6-7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9A7 7 0 0 1 18 6l2 6M4 12l2 6a7 7 0 0 0 12.4-3"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4 20-7ZM22 2 11 13"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m18 6-12 12M6 6l12 12"/></symbol>
+    <symbol id="i-car" viewBox="0 0 24 24"><path d="m5 11 1.5-5h11L19 11l2 2v5h-2v2h-3v-2H8v2H5v-2H3v-5l2-2Z"/><path d="M6.5 14h.01M17.5 14h.01M6.5 11h11"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="/" aria-label="VIKMO DealerDesk home">
+        <span class="brand-mark"><svg class="icon"><use href="#i-car"/></svg></span>
+        <span class="brand-copy"><strong>VIKMO</strong><small>DEALERDESK</small></span>
+      </a>
+      <div class="workspace-label">WORKSPACE</div>
+      <nav class="side-nav" aria-label="Main navigation">
+        <button class="nav-link active" data-view="dashboard"><svg class="icon"><use href="#i-grid"/></svg><span>Overview</span></button>
+        <button class="nav-link" data-view="catalogue"><svg class="icon"><use href="#i-box"/></svg><span>Parts catalogue</span></button>
+        <button class="nav-link" data-view="inventory"><svg class="icon"><use href="#i-warehouse"/></svg><span>Inventory</span></button>
+        <button class="nav-link" data-view="dealers"><svg class="icon"><use href="#i-users"/></svg><span>Dealers</span></button>
+        <button class="nav-link" data-view="orders"><svg class="icon"><use href="#i-receipt"/></svg><span>Orders</span></button>
+        <button class="nav-link" data-view="assistant"><svg class="icon"><use href="#i-spark"/></svg><span>AI assistant</span><span class="nav-live"></span></button>
+        <button class="nav-link" data-view="forecast"><svg class="icon"><use href="#i-chart"/></svg><span>Forecast & reorder</span></button>
+      </nav>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-status"><span class="status-dot"></span><span><strong>DealerDesk online</strong><small>Connected to live data</small></span></div>
+      <div class="profile"><div class="avatar">VD</div><div><strong>VIKMO Dealer</strong><small>Operations workspace</small></div><span class="profile-menu">•••</span></div>
+    </aside>
+
+    <main class="main-shell">
+      <header class="topbar">
+        <button class="icon-button mobile-menu" id="menu-toggle" aria-label="Toggle navigation"><svg class="icon"><use href="#i-menu"/></svg></button>
+        <div class="breadcrumbs"><span>Workspace</span><span class="crumb-slash">/</span><strong id="crumb-current">Overview</strong></div>
+        <div class="topbar-actions">
+          <span class="connection-pill"><span class="status-dot"></span> Live API</span>
+          <button class="icon-button refresh-button" id="refresh-button" aria-label="Refresh current view"><svg class="icon"><use href="#i-refresh"/></svg></button>
+          <div class="top-avatar">VD</div>
+        </div>
+      </header>
+      <section class="page-content">
+        <div id="global-notice" class="notice hidden" role="status"></div>
+
+        <section class="view active" id="view-dashboard">
+          <div class="page-heading">
+            <div><div class="eyebrow">DEALER OPERATIONS</div><h1>Good day. <span class="heading-muted">Here’s your overview.</span></h1><p class="page-subtitle">A live snapshot of your catalogue, inventory and orders.</p></div>
+            <div class="heading-actions"><span class="date-chip" id="today-date"></span><button class="button button-primary" data-go="orders"><svg class="icon"><use href="#i-plus"/></svg> Create draft order</button></div>
+          </div>
+          <div class="metric-grid">
+            <article class="metric-card"><div class="metric-top"><span class="metric-label">CATALOGUE PARTS</span><span class="metric-icon blue-soft"><svg class="icon"><use href="#i-box"/></svg></span></div><div class="metric-value" id="metric-products">—</div><div class="metric-foot"><span class="metric-dot dot-blue"></span>Live product records</div></article>
+            <article class="metric-card"><div class="metric-top"><span class="metric-label">ACTIVE DEALERS</span><span class="metric-icon violet-soft"><svg class="icon"><use href="#i-users"/></svg></span></div><div class="metric-value" id="metric-dealers">—</div><div class="metric-foot"><span class="metric-dot dot-violet"></span>Registered accounts</div></article>
+            <article class="metric-card"><div class="metric-top"><span class="metric-label">DRAFT ORDERS</span><span class="metric-icon amber-soft"><svg class="icon"><use href="#i-receipt"/></svg></span></div><div class="metric-value" id="metric-drafts">—</div><div class="metric-foot"><span class="metric-dot dot-amber"></span>Awaiting dealer confirmation</div></article>
+            <article class="metric-card"><div class="metric-top"><span class="metric-label">REORDER ALERTS</span><span class="metric-icon red-soft"><svg class="icon"><use href="#i-chart"/></svg></span></div><div class="metric-value" id="metric-reorders">—</div><div class="metric-foot"><span class="metric-dot dot-red"></span>Parts below reorder point</div></article>
+          </div>
+          <div class="dashboard-grid">
+            <article class="panel panel-wide"><div class="panel-header"><div><h2>Recent orders</h2><p>Latest activity across your dealer network</p></div><button class="text-button" data-go="orders">View all <svg class="icon"><use href="#i-arrow"/></svg></button></div><div id="dashboard-orders" class="table-wrap"><div class="loading-line">Loading recent orders…</div></div></article>
+            <article class="panel"><div class="panel-header"><div><h2>Inventory health</h2><p>Stock status from your catalogue</p></div><span class="mini-badge">LIVE</span></div><div id="inventory-health" class="health-content"><div class="loading-line">Loading inventory…</div></div><div class="panel-footer-link"><button class="text-button" data-go="inventory">Open inventory <svg class="icon"><use href="#i-arrow"/></svg></button></div></article>
+            <article class="panel panel-wide reorder-panel"><div class="panel-header"><div><h2>Reorder attention</h2><p>Suggestions calculated from forecast and current stock</p></div><button class="text-button" data-go="forecast">View planning <svg class="icon"><use href="#i-arrow"/></svg></button></div><div id="dashboard-reorders" class="reorder-list"><div class="loading-line">Loading reorder suggestions…</div></div></article>
+          </div>
+        </section>
+
+        <section class="view" id="view-catalogue">
+          <div class="page-heading"><div><div class="eyebrow">PRODUCT MANAGEMENT</div><h1>Parts catalogue</h1><p class="page-subtitle">Search live product records, prices and vehicle fitment.</p></div><div class="heading-actions"><span class="result-count" id="catalogue-count"></span></div></div>
+          <article class="panel">
+            <div class="toolbar"><label class="search-field"><svg class="icon"><use href="#i-search"/></svg><input id="product-search" type="search" placeholder="Search SKU, name or brand…" autocomplete="off"></label><input class="filter-field" id="product-category" type="search" placeholder="Category"><input class="filter-field" id="product-vehicle" type="search" placeholder="Vehicle fitment"><button class="button button-secondary" id="product-search-clear">Clear filters</button></div>
+            <div id="catalogue-table" class="table-wrap"><div class="loading-line">Loading catalogue…</div></div><div class="pagination" id="catalogue-pagination"></div>
+          </article>
+        </section>
+
+        <section class="view" id="view-inventory">
+          <div class="page-heading"><div><div class="eyebrow">STOCK CONTROL</div><h1>Inventory</h1><p class="page-subtitle">Review available units and submit precise stock corrections.</p></div><span class="result-count" id="inventory-count"></span></div>
+          <article class="panel"><div class="toolbar"><label class="search-field"><svg class="icon"><use href="#i-search"/></svg><input id="inventory-search" type="search" placeholder="Find a part by SKU or name…"></label><span class="toolbar-note">Updates are saved directly to the inventory API.</span></div><div id="inventory-table" class="table-wrap"><div class="loading-line">Loading inventory…</div></div><div class="pagination" id="inventory-pagination"></div></article>
+        </section>
+
+        <section class="view" id="view-dealers">
+          <div class="page-heading"><div><div class="eyebrow">DEALER NETWORK</div><h1>Dealers</h1><p class="page-subtitle">Manage dealer accounts and contact details.</p></div><button class="button button-primary" id="open-dealer-form"><svg class="icon"><use href="#i-plus"/></svg> Add dealer</button></div>
+          <article class="panel hidden" id="dealer-form-panel"><div class="panel-header"><div><h2>New dealer account</h2><p>Required fields are marked with an asterisk.</p></div><button class="icon-button" id="close-dealer-form" aria-label="Close form"><svg class="icon"><use href="#i-close"/></svg></button></div><form id="dealer-form" class="form-grid"><label>Dealer code *<input name="dealer_code" required maxlength="30" placeholder="DLR-026"></label><label>Dealer name *<input name="name" required maxlength="255" placeholder="Business name"></label><label>City<input name="city" maxlength="100" placeholder="City"></label><label>Phone<input name="phone" maxlength="30" placeholder="Phone number"></label><label>Email<input name="email" type="email" placeholder="name@example.com"></label><label>GSTIN<input name="gstin" maxlength="30" placeholder="GST registration"></label><label>Credit limit<input name="credit_limit" type="number" min="0" step="0.01" value="0.00"></label><div class="form-actions"><button class="button button-primary" type="submit">Create dealer</button></div></form></article>
+          <article class="panel"><div class="toolbar"><label class="search-field"><svg class="icon"><use href="#i-search"/></svg><input id="dealer-search" type="search" placeholder="Search dealer name, code or city…"></label><span class="result-count" id="dealer-count"></span></div><div id="dealers-table" class="table-wrap"><div class="loading-line">Loading dealer network…</div></div><div class="pagination" id="dealers-pagination"></div></article>
+        </section>
+
+        <section class="view" id="view-orders">
+          <div class="page-heading"><div><div class="eyebrow">ORDER MANAGEMENT</div><h1>Orders</h1><p class="page-subtitle">Create and review draft orders using current catalogue pricing.</p></div></div>
+          <div class="orders-layout">
+            <article class="panel order-builder"><div class="panel-header"><div><h2>Create draft</h2><p>Orders created here remain in DRAFT status.</p></div><span class="draft-tag">DRAFT ONLY</span></div><form id="order-form"><label class="field-label" for="order-dealer">Dealer account</label><select id="order-dealer" required><option value="">Loading dealers…</option></select><div class="order-item-heading"><span>Order items</span><button class="text-button" type="button" id="add-order-item"><svg class="icon"><use href="#i-plus"/></svg> Add line</button></div><div id="order-lines" class="order-lines"></div><div class="order-total-note">Prices and tax are calculated by the server from current product data.</div><button class="button button-primary button-full" type="submit">Create draft order <svg class="icon"><use href="#i-arrow"/></svg></button></form><div id="order-feedback" class="form-feedback hidden"></div></article>
+            <article class="panel"><div class="panel-header"><div><h2>Order history</h2><p>Recent orders with live status and totals.</p></div><select class="compact-select" id="order-status-filter"><option value="">All statuses</option><option value="DRAFT">Draft</option><option value="CONFIRMED">Confirmed</option><option value="DISPATCHED">Dispatched</option><option value="DELIVERED">Delivered</option><option value="CANCELLED">Cancelled</option></select></div><div id="orders-table" class="table-wrap"><div class="loading-line">Loading orders…</div></div><div class="pagination" id="orders-pagination"></div></article>
+          </div>
+        </section>
+
+        <section class="view" id="view-assistant">
+          <div class="page-heading"><div><div class="eyebrow">VIKMO INTELLIGENCE</div><h1>AI dealer assistant</h1><p class="page-subtitle">Ask about fitment, availability and current catalogue pricing.</p></div><div class="heading-actions"><label class="assistant-dealer-label">Acting as<select id="assistant-dealer"><option value="">Choose a dealer</option></select></label><span class="assistant-status"><span class="status-dot"></span> Server connected</span></div></div>
+          <div class="assistant-layout"><article class="panel chat-panel"><div class="chat-header"><div class="assistant-avatar"><svg class="icon"><use href="#i-spark"/></svg></div><div><strong>DealerDesk assistant</strong><span>Grounded in your catalogue and current inventory</span></div><span class="chat-secure">SESSION SAVED</span></div><div id="chat-messages" class="chat-messages"><div class="chat-welcome"><div class="welcome-orb"><svg class="icon"><use href="#i-spark"/></svg></div><h2>How can I help today?</h2><p>Ask for a part, check current stock, or request a draft order.</p><div class="suggestion-chips"><button type="button" data-prompt="Find brake pads for a Bajaj Pulsar 150">Find compatible parts</button><button type="button" data-prompt="Check stock for ACC-1001">Check live stock</button></div></div></div><form id="chat-form" class="chat-composer"><textarea id="chat-input" rows="1" maxlength="2000" placeholder="Ask about parts, fitment or stock…" required></textarea><button class="send-button" type="submit" aria-label="Send message"><svg class="icon"><use href="#i-send"/></svg></button></form><div class="chat-disclaimer">The assistant can create draft orders only. It cannot confirm an order.</div></article><aside class="assistant-side"><article class="panel insight-card"><span class="insight-icon"><svg class="icon"><use href="#i-spark"/></svg></span><h3>Catalogue-aware answers</h3><p>Product matches, availability and prices are checked against your live DealerDesk records.</p></article><article class="panel insight-card"><span class="insight-icon insight-amber"><svg class="icon"><use href="#i-receipt"/></svg></span><h3>Drafts, never submitted</h3><p>Order requests create a DRAFT for review. Inventory is not reserved or deducted.</p></article><div class="session-card"><span class="session-label">CURRENT SESSION</span><span id="session-label" class="session-value">Loading session…</span><button class="text-button" id="new-chat">Start new conversation <svg class="icon"><use href="#i-arrow"/></svg></button></div></aside></div>
+        </section>
+
+        <section class="view" id="view-forecast">
+          <div class="page-heading"><div><div class="eyebrow">PLANNING & ANALYTICS</div><h1>Forecast & reorder</h1><p class="page-subtitle">Four-week demand outlook paired with current stock and lead times.</p></div><span class="forecast-horizon">HORIZON · 4 WEEKS</span></div>
+          <div class="forecast-layout"><article class="panel"><div class="panel-header"><div><h2>Reorder suggestions</h2><p>Calculated from forecast demand and live available stock.</p></div></div><div id="reorder-table" class="table-wrap"><div class="loading-line">Loading reorder plan…</div></div></article><article class="panel forecast-detail-panel"><div class="panel-header"><div><h2>SKU forecast</h2><p>Weekly forecast from the published file.</p></div></div><label class="field-label" for="forecast-sku">Choose forecast SKU</label><select id="forecast-sku" class="select-full"><option value="">Select a SKU</option></select><div id="forecast-detail" class="forecast-detail"><div class="empty-state compact-empty"><div class="empty-icon"><svg class="icon"><use href="#i-chart"/></svg></div><strong>Select a part</strong><span>Its four forecast weeks will appear here.</span></div></div></article></div>
+          <p class="data-note">Forecasts are estimates, not purchase orders. Reorder suggestions use the assignment’s lead-time safety-stock rule.</p>
+        </section>
+        <footer class="page-footer"><span>VIKMO DealerDesk</span><span>Automotive parts operations · Live backend data</span></footer>
+      </section>
+    </main>
+  </div>
+  <div id="toast-region" class="toast-region" aria-live="polite"></div>
+  <script src="{% static 'app.js' %}" defer></script>
+</body>
+</html>
