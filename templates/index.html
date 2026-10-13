@@ -123,6 +123,11 @@
       </section>
     </main>
   </div>
+  <div id="order-drawer-backdrop" class="drawer-backdrop hidden"></div>
+  <aside id="order-drawer" class="drawer hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+    <div class="drawer-header"><div><div class="eyebrow">ORDER DETAIL</div><h2 id="drawer-title">Order</h2></div><button class="icon-button" id="drawer-close" aria-label="Close order detail"><svg class="icon"><use href="#i-close"/></svg></button></div>
+    <div id="drawer-body" class="drawer-body"></div>
+  </aside>
   <div id="toast-region" class="toast-region" aria-live="polite"></div>
   <script src="{% static 'app.js' %}" defer></script>
 </body>

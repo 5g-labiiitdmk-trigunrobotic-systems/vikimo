@@ -121,6 +121,12 @@ returns `502 SUPPLIER_UNAVAILABLE` with nothing changed. To try it locally, run
 `python supplier_mock/mock_supplier.py` and set `SUPPLIER_API_URL` and
 `SUPPLIER_API_KEY` to the values it prints.
 
+The dealer portal (`/`) lets you open any order to see its line-by-line GST breakdown and
+run the valid next action (confirm, dispatch, deliver, cancel); a short-stock confirm lists
+every short line. `tests_ui/e2e_portal.py` is a Playwright test that checks the dashboard
+figures against the database and drives this flow (see its docstring; it is not part of
+`manage.py test`).
+
 ## Setup
 
 Create a fresh PostgreSQL database and set `DATABASE_URL` to its connection

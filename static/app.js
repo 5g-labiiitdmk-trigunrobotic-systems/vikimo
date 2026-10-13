@@ -32,6 +32,7 @@
     forecastSku: "",
     assistantDealer: "",
     chatBusy: false,
+    openOrder: null,
   };
 
   const byId = (id) => document.getElementById(id);
@@ -80,8 +81,13 @@
     }
     if (!response.ok) {
       const error = payload?.error;
-      const detailText = Array.isArray(error?.details) ? error.details.join("; ") : "";
-      throw new ApiError(error?.message || `Request failed (${response.status}).`, response.status, error?.code, detailText);
+      const describe = (item) => (item && typeof item === "object"
+        ? ("sku" in item ? `${item.sku}: requested ${item.requested}, available ${item.available}` : JSON.stringify(item))
+        : String(item));
+      const detailText = Array.isArray(error?.details) ? error.details.map(describe).join("; ") : "";
+      const apiError = new ApiError(error?.message || `Request failed (${response.status}).`, response.status, error?.code, detailText);
+      apiError.rawDetails = Array.isArray(error?.details) ? error.details : [];
+      throw apiError;
     }
     return payload;
   }
@@ -314,14 +320,14 @@
 
   function renderOrderTable(target, orders, compact = false) {
     if (!orders.length) {
-      target.innerHTML = `<table><tbody>${emptyTable(compact ? 4 : 5, "Drafts and orders will appear here once created.")}</tbody></table>`;
+      target.innerHTML = `<table><tbody>${emptyTable(compact ? 3 : 6, "Drafts and orders will appear here once created.")}</tbody></table>`;
       return;
     }
     const rows = orders.map((order) => {
       const dealer = state.dealers.find((item) => Number(item.id) === Number(order.dealer_id));
-      return `<tr><td><span class="primary-cell">${escapeHTML(order.order_number)}</span><span class="secondary-cell">${dateLabel(order.created_at)}</span></td>${compact ? "" : `<td>${dealer ? escapeHTML(dealer.name) : `Dealer #${escapeHTML(order.dealer_id)}`}</td>`}<td>${statusBadge(order.status)}</td><td class="money">${money(order.grand_total)}</td>${compact ? "" : `<td>${Array.isArray(order.items) ? order.items.length : 0} line${order.items?.length === 1 ? "" : "s"}</td>`}</tr>`;
+      return `<tr class="order-row" data-order="${escapeHTML(order.order_number)}" tabindex="0"><td><span class="primary-cell">${escapeHTML(order.order_number)}</span><span class="secondary-cell">${dateLabel(order.created_at)}</span></td>${compact ? "" : `<td>${dealer ? escapeHTML(dealer.name) : `Dealer #${escapeHTML(order.dealer_id)}`}</td>`}<td>${statusBadge(order.status)}</td><td class="money">${money(order.grand_total)}</td>${compact ? "" : `<td>${Array.isArray(order.items) ? order.items.length : 0} line${order.items?.length === 1 ? "" : "s"}</td><td><button class="text-button view-order" type="button" data-order="${escapeHTML(order.order_number)}">View</button></td>`}</tr>`;
     }).join("");
-    target.innerHTML = `<table><thead><tr><th>ORDER</th>${compact ? "" : "<th>DEALER</th>"}<th>STATUS</th><th>TOTAL</th>${compact ? "" : "<th>ITEMS</th>"}</tr></thead><tbody>${rows}</tbody></table>`;
+    target.innerHTML = `<table><thead><tr><th>ORDER</th>${compact ? "" : "<th>DEALER</th>"}<th>STATUS</th><th>TOTAL</th>${compact ? "" : "<th>ITEMS</th><th></th>"}</tr></thead><tbody>${rows}</tbody></table>`;
   }
 
   async function loadCatalogue(page = state.cataloguePage) {
@@ -516,6 +522,7 @@
       toast("Draft order created. It has not been confirmed.");
       loadOrders(1);
       loadDashboard();
+      openOrder(order.order_number);
     } catch (error) {
       showOrderFeedback(formatError(error), true);
     } finally {
@@ -528,6 +535,119 @@
     element.textContent = message;
     element.classList.toggle("error", isError);
     element.classList.remove("hidden");
+  }
+
+  const NEXT_ACTIONS = {
+    DRAFT: [
+      { action: "confirm", label: "Confirm order", primary: true, hint: "Checks stock, deducts it and locks prices." },
+      { action: "cancel", label: "Cancel draft", danger: true },
+    ],
+    CONFIRMED: [
+      { action: "dispatch", label: "Mark dispatched", primary: true },
+      { action: "cancel", label: "Cancel order", danger: true, hint: "Returns the reserved units to stock." },
+    ],
+    DISPATCHED: [{ action: "deliver", label: "Mark delivered", primary: true }],
+    DELIVERED: [],
+    CANCELLED: [],
+  };
+  const FLOW = ["DRAFT", "CONFIRMED", "DISPATCHED", "DELIVERED"];
+
+  function openDrawerShell(title) {
+    byId("drawer-title").textContent = title;
+    byId("order-drawer").classList.remove("hidden");
+    byId("order-drawer-backdrop").classList.remove("hidden");
+  }
+
+  function closeOrder() {
+    state.openOrder = null;
+    byId("order-drawer").classList.add("hidden");
+    byId("order-drawer-backdrop").classList.add("hidden");
+  }
+
+  async function openOrder(orderNumber) {
+    state.openOrder = orderNumber;
+    openDrawerShell(orderNumber);
+    byId("drawer-body").innerHTML = '<div class="loading-line">Loading order…</div>';
+    try {
+      await loadDealersCache();
+      renderOrderDetail(await request(`/orders/${encodeURIComponent(orderNumber)}/`));
+    } catch (error) {
+      byId("drawer-body").innerHTML = `<div class="form-feedback error">${escapeHTML(errorDetail(error))}</div>`;
+    }
+  }
+
+  function renderOrderDetail(order) {
+    if (state.openOrder !== order.order_number) return;
+    const dealer = state.dealers.find((item) => Number(item.id) === Number(order.dealer_id));
+    const lines = (order.items || []).map((item) => `<tr><td><span class="primary-cell">${escapeHTML(item.sku)}</span><span class="secondary-cell">${escapeHTML(item.name)}</span></td><td>${Number(item.quantity)}</td><td class="money">${money(item.unit_price)}</td><td class="money">${money(item.line_subtotal)}</td><td class="money">${money(item.line_tax)}</td><td class="money">${money(item.line_total)}</td></tr>`).join("");
+    const cancelled = order.status === "CANCELLED";
+    const reached = FLOW.indexOf(order.status);
+    const steps = cancelled
+      ? '<div class="flow-cancelled">This order was cancelled.</div>'
+      : `<ol class="flow">${FLOW.map((step, index) => `<li class="${index < reached ? "done" : index === reached ? "current" : ""}"><i></i>${step.charAt(0) + step.slice(1).toLowerCase()}</li>`).join("")}</ol>`;
+    const actions = NEXT_ACTIONS[order.status] || [];
+    const buttons = actions.map((item) => `<button type="button" class="button ${item.primary ? "button-primary" : item.danger ? "button-danger" : "button-secondary"}" data-action="${item.action}" data-label="${escapeHTML(item.label)}">${escapeHTML(item.label)}</button>`).join("");
+    const hints = actions.filter((item) => item.hint).map((item) => `<p class="action-hint"><strong>${escapeHTML(item.label)}:</strong> ${escapeHTML(item.hint)}</p>`).join("");
+    const priceNote = order.status === "DRAFT"
+      ? "Draft prices follow the current catalogue and are locked when the order is confirmed."
+      : cancelled ? "Prices were locked or the order was cancelled before confirmation." : "Prices were locked when the order was confirmed.";
+    byId("drawer-title").textContent = order.order_number;
+    byId("drawer-body").innerHTML = `
+      <div class="drawer-meta">${statusBadge(order.status)}<span>${dealer ? escapeHTML(dealer.name) : `Dealer #${escapeHTML(order.dealer_id)}`}</span><span>Created ${dateLabel(order.created_at)}</span></div>
+      ${steps}
+      <div class="table-wrap"><table class="detail-table"><thead><tr><th>PART</th><th>QTY</th><th>UNIT PRICE</th><th>SUBTOTAL</th><th>GST 18%</th><th>TOTAL</th></tr></thead><tbody>${lines}</tbody></table></div>
+      <dl class="totals"><div><dt>Subtotal</dt><dd id="detail-subtotal">${money(order.subtotal)}</dd></div><div><dt>GST (18%)</dt><dd id="detail-tax">${money(order.tax_total)}</dd></div><div class="grand"><dt>Grand total</dt><dd id="detail-grand">${money(order.grand_total)}</dd></div></dl>
+      <p class="data-note">${priceNote}</p>
+      <div id="drawer-error" class="form-feedback error hidden" role="alert"></div>
+      ${actions.length ? `<div class="drawer-actions">${buttons}</div>${hints}` : '<p class="data-note">No further actions are available for this order.</p>'}`;
+  }
+
+  function showDrawerError(error) {
+    const box = byId("drawer-error");
+    if (!box) return;
+    const short = (error.rawDetails || []).filter((item) => item && typeof item === "object" && "sku" in item);
+    const list = short.length
+      ? `<ul>${short.map((item) => `<li><strong>${escapeHTML(item.sku)}</strong>: requested ${Number(item.requested)}, only ${Number(item.available)} available</li>`).join("")}</ul><span>Nothing was changed. Lower the quantities or restock, then try again.</span>`
+      : error.details ? `<span>${escapeHTML(error.details)}</span>` : "";
+    box.innerHTML = `<strong>${escapeHTML(error.message)}</strong>${list}`;
+    box.classList.remove("hidden");
+  }
+
+  async function runOrderAction(button) {
+    const orderNumber = state.openOrder;
+    const action = button.dataset.action;
+    if (action === "cancel" && button.dataset.armed !== "1") {
+      button.dataset.armed = "1";
+      button.textContent = "Click again to cancel";
+      window.setTimeout(() => {
+        if (button.isConnected && button.dataset.armed === "1") {
+          button.dataset.armed = "";
+          button.textContent = button.dataset.label;
+        }
+      }, 4000);
+      return;
+    }
+    const buttons = byId("drawer-body").querySelectorAll("[data-action]");
+    buttons.forEach((item) => { item.disabled = true; });
+    try {
+      const order = await request(`/orders/${encodeURIComponent(orderNumber)}/${action}/`, { method: "POST" });
+      state.products = [];
+      renderOrderDetail(order);
+      toast(`${order.order_number} is now ${order.status.toLowerCase()}.`);
+      refreshAfterOrderChange();
+    } catch (error) {
+      buttons.forEach((item) => { item.disabled = false; });
+      showDrawerError(error);
+      if (error.code === "INVALID_TRANSITION" || error.code === "NOT_FOUND") {
+        try { renderOrderDetail(await request(`/orders/${encodeURIComponent(orderNumber)}/`)); showDrawerError(error); } catch { /* keep the message */ }
+        refreshAfterOrderChange();
+      }
+    }
+  }
+
+  function refreshAfterOrderChange() {
+    if (state.view === "orders") loadOrders(state.ordersPage);
+    if (state.view === "dashboard") loadDashboard();
   }
 
   async function loadOrders(page = state.ordersPage) {
@@ -734,6 +854,20 @@
       localStorage.setItem(`vikmo.session.${state.assistantDealer}`, `dealer-${state.assistantDealer}-${crypto.randomUUID()}`);
       renderChat();
       toast("Started a new assistant conversation.");
+    });
+    byId("drawer-close").addEventListener("click", closeOrder);
+    byId("order-drawer-backdrop").addEventListener("click", closeOrder);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && state.openOrder) closeOrder();
+      if (event.key === "Enter" && event.target.matches?.("tr[data-order]")) openOrder(event.target.dataset.order);
+    });
+    byId("drawer-body").addEventListener("click", (event) => {
+      const button = event.target.closest("[data-action]");
+      if (button && !button.disabled) runOrderAction(button);
+    });
+    document.querySelector(".page-content").addEventListener("click", (event) => {
+      const row = event.target.closest("[data-order]");
+      if (row) openOrder(row.dataset.order);
     });
     byId("forecast-sku").addEventListener("change", (event) => loadForecastDetail(event.target.value));
     document.body.addEventListener("click", (event) => {
