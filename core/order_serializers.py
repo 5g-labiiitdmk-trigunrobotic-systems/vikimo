@@ -6,7 +6,7 @@ from core.models import Dealer, Order, OrderItem, Product
 
 class OrderItemInputSerializer(serializers.Serializer):
     sku = serializers.CharField(max_length=30)
-    quantity = serializers.IntegerField(min_value=1)
+    quantity = serializers.IntegerField(min_value=1, max_value=1_000_000)
 
     def validate_sku(self, value):
         return value.strip()

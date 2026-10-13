@@ -1,8 +1,8 @@
 
-import uuid
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
+from django.utils import timezone
 from django.db.models import Prefetch
 
 from rest_framework import status
@@ -10,7 +10,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.models import Order, OrderItem, Product
+from core.models import Order, OrderDayCounter, OrderItem, Product
 from core.order_serializers import (
     OrderCreateSerializer,
     OrderResponseSerializer,
@@ -29,7 +29,17 @@ def money(value):
 
 
 def generate_order_number():
-    return f"ORD-{uuid.uuid4().hex[:12].upper()}"
+    """Return the next ORD-YYYYMMDD-NNNN number for today (Asia/Kolkata).
+
+    Must run inside transaction.atomic(): the counter row is locked until the
+    caller commits, so concurrent creators get different, gap-free numbers.
+    """
+    today = timezone.localdate()
+    OrderDayCounter.objects.get_or_create(date=today)
+    counter = OrderDayCounter.objects.select_for_update().get(date=today)
+    counter.last_number += 1
+    counter.save(update_fields=["last_number"])
+    return f"ORD-{today:%Y%m%d}-{counter.last_number:04d}"
 
 
 class OrderPagination(PageNumberPagination):

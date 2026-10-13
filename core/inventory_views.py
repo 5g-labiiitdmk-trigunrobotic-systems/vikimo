@@ -9,6 +9,9 @@ from core.models import Product
 from core.views import error_response
 
 
+MAX_STOCK = 2_147_483_647  # largest value the stock column can hold
+
+
 class InventoryUpdateView(APIView):
     """PUT /api/inventory/{sku}/"""
 
@@ -20,6 +23,13 @@ class InventoryUpdateView(APIView):
                 "NOT_FOUND",
                 "Product not found.",
                 status.HTTP_404_NOT_FOUND,
+            )
+
+        if not isinstance(request.data, dict):
+            return error_response(
+                "VALIDATION_ERROR",
+                "Request body must be a JSON object.",
+                status.HTTP_400_BAD_REQUEST,
             )
 
         quantity = request.data.get("quantity")
@@ -43,6 +53,13 @@ class InventoryUpdateView(APIView):
             )
 
         quantity = int(quantity)
+
+        if quantity > MAX_STOCK:
+            return error_response(
+                "VALIDATION_ERROR",
+                f"Quantity must be at most {MAX_STOCK}.",
+                status.HTTP_400_BAD_REQUEST,
+            )
 
         with transaction.atomic():
             product.stock = quantity

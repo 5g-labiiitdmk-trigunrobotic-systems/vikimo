@@ -123,4 +123,13 @@ class AssistantSession(models.Model):
 
     def __str__(self):
         return self.session_id
-    
+
+
+class OrderDayCounter(models.Model):
+    """Last order sequence number issued for one Asia/Kolkata calendar day."""
+
+    date = models.DateField(primary_key=True)
+    last_number = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.date}: {self.last_number}"

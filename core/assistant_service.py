@@ -15,6 +15,7 @@ from core.assistant_tools import (
 
 logger = logging.getLogger(__name__)
 MAX_HISTORY_MESSAGES = 20
+DEFAULT_GROQ_MODEL = "openai/gpt-oss-20b"
 APPROVED_TOOLS = {
     "search_parts",
     "check_stock",
@@ -930,12 +931,10 @@ def run_assistant(message, dealer_id, history=None):
     history = sanitize_history(history)
 
     api_key = os.getenv("GROQ_API_KEY")
-    model = os.getenv("GROQ_MODEL")
+    model = os.getenv("GROQ_MODEL") or DEFAULT_GROQ_MODEL
 
-    if not api_key or not model:
-        raise RuntimeError(
-            "GROQ_API_KEY and GROQ_MODEL must be configured in .env."
-        )
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY must be configured.")
 
     client = Groq(
         api_key=api_key,
@@ -971,7 +970,7 @@ def run_assistant(message, dealer_id, history=None):
             model=model,
             messages=messages,
             tools=tool_definitions,
-            tool_choice="auto",
+            tool_choice="required" if required_tool_retry else "auto",
             temperature=0.2,
         )
 

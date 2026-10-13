@@ -1,5 +1,13 @@
 # VIKMO DealerDesk
 
+**Track: `aiml`** (AI / ML Intern)
+
+- Required parts built: A1 backend core, C Dealer Assistant, D Forecasting and reorder.
+- Optional parts attempted: E frontend (a basic portal in `templates/` and `static/`).
+- Not built: A2 order engine (confirm/dispatch/deliver/cancel, idempotency) and B supplier sync.
+- LLM provider: **Groq**, model `openai/gpt-oss-20b` (override with `GROQ_MODEL`).
+- Video walkthrough: _add your unlisted link here before submitting_
+
 Django REST Framework and PostgreSQL backend for the VIKMO DealerDesk
 assessment. The project includes the catalogue, dealers, orders, inventory,
 supplier sync, Dealer Assistant, and forecasting endpoints.
@@ -11,6 +19,13 @@ the process environment (or in a local `.env`, which must not be committed).
 The configured development model is `openai/gpt-oss-20b`; deployments can
 select another Groq-supported model with `GROQ_MODEL`. The application does
 not silently fall back to another provider or model.
+
+Order numbers use the contract format `ORD-YYYYMMDD-NNNN`: the date is the
+Asia/Kolkata creation date and `NNNN` is a per-day sequence kept in the
+`OrderDayCounter` table. The counter row is locked inside the order-creating
+transaction, so concurrent requests receive unique, gap-free numbers.
+`GROQ_MODEL` defaults to `openai/gpt-oss-20b` when unset; only `GROQ_API_KEY`
+is required.
 
 `POST /api/assistant/chat/` accepts `session_id`, `dealer_id`, and `message`.
 The request is validated, each session is bound to its dealer, and up to 20

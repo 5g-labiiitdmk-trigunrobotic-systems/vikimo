@@ -96,6 +96,13 @@ class ProductListCreateView(APIView):
         return paginator.get_paginated_response(serializer.data)
 
     def post(self, request):
+        if not isinstance(request.data, dict):
+            return error_response(
+                "VALIDATION_ERROR",
+                "Request body must be a JSON object.",
+                status.HTTP_400_BAD_REQUEST,
+            )
+
         sku = request.data.get("sku")
 
         # Return 409 before serializer validation for an existing SKU.
@@ -162,6 +169,13 @@ class ProductDetailView(APIView):
                 "NOT_FOUND",
                 "Product not found.",
                 status.HTTP_404_NOT_FOUND,
+            )
+
+        if not isinstance(request.data, dict):
+            return error_response(
+                "VALIDATION_ERROR",
+                "Request body must be a JSON object.",
+                status.HTTP_400_BAD_REQUEST,
             )
 
         requested_sku = request.data.get("sku")
